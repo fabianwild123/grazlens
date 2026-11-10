@@ -32,8 +32,10 @@ class HomeScreen extends StatelessWidget {
             SizedBox(height: 20),
 
             ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent,
-              foregroundColor: Colors.black, minimumSize: Size(220, 50)), onPressed: () {
-              }, child: Text("FOTO AUFNEHMEN")),
+              foregroundColor: Colors.black, minimumSize: Size(220, 50)), onPressed: () async {
+              ImagePicker picker=ImagePicker();
+              XFile? bild=await picker.pickImage(source: ImageSource.camera);},
+              child: Text("FOTO AUFNEHMEN")),
 
             SizedBox(height:20),
 
