@@ -25,6 +25,5 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Asset-Ordner für das YOLO-Modell und die Labels
   assets:
     - assets/models/
