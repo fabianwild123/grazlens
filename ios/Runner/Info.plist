@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>GrazLens benötigt Zugriff auf die Kamera, um Sehenswürdigkeiten zu fotografieren.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>GrazLens benötigt Zugriff auf deine Fotogalerie, um Bilder auszuwählen.</string>
 </dict>
 </plist>
