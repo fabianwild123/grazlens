@@ -5,7 +5,25 @@ import 'package:flutter_vision/flutter_vision.dart';
 import 'dart:typed_data';
 
 void main() {
-  runApp(const MyApp());
+  // Zeigt Fehler im Release-Build als Text auf dem Bildschirm an:
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Material(
+      child: SafeArea(
+        child: Container(
+          color: Colors.white,
+          padding: const EdgeInsets.all(16),
+          child: SingleChildScrollView(
+            child: Text(
+              'Fehler aufgetreten:\n\n${details.exceptionAsString()}\n\nStacktrace:\n${details.stack}',
+              style: const TextStyle(color: Colors.red, fontSize: 13),
+            ),
+          ),
+        ),
+      ),
+    );
+  };
+
+  runApp(const MyApp()); // Bzw. dein bisheriger runApp-Aufruf
 }
 
 class MyApp extends StatelessWidget {
@@ -39,16 +57,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadModel() async {
-    await vision.loadYoloModel(
-      modelPath: 'assets/models/yolov8n.tflite',
-      labels: 'assets/models/labels.txt',
-      modelVersion: 'yolov8',
-      numThreads: 2,
-      useGpu: true,
-    );
-    setState(() {
-      isModelLoaded = true; 
-    });
+    try {  await vision.loadYoloModel(
+        modelPath: 'assets/models/yolov8n.tflite',
+        labels: 'assets/models/labels.txt',
+        modelVersion: 'yolov8',
+        numThreads: 2,
+        useGpu: false,
+      );
+      setState(() {
+        isModelLoaded = true; 
+      });
+
+    } catch (e) {
+    debugPrint("Modell-Ladefehler: $e");
+    }
   }
 
   Widget build(BuildContext context) {
