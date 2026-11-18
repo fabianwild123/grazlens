@@ -33,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isModelLoaded = false;
   bool isWorking = false;
   String? ladeFehler;
+  String modellInfo = "";
   List labels = [];
 
   @override
@@ -44,12 +45,19 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadModel() async {
     try {
       interpreter = await Interpreter.fromAsset('assets/yolov8n.tflite');
+      interpreter!.allocateTensors();
+
+      final inTensor = interpreter!.getInputTensor(0);
+      final outTensor = interpreter!.getOutputTensor(0);
+
       final rawLabels = await rootBundle.loadString('assets/labels.txt');
       labels = rawLabels.split('\n');
 
       if (!mounted) return;
       setState(() {
         isModelLoaded = true;
+        modellInfo =
+            "Input: ${inTensor.shape} (${inTensor.type})\nOutput: ${outTensor.shape} (${outTensor.type})";
       });
     } catch (e, st) {
       debugPrint("Modell-Ladefehler: $e\n$st");
@@ -86,41 +94,73 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
+      final inTensor = interpreter!.getInputTensor(0);
+      final inShape = inTensor.shape; 
+      final bool channelsFirst = inShape[1] == 3;
+      final int imgHeight = channelsFirst ? inShape[2] : inShape[1];
+      final int imgWidth = channelsFirst ? inShape[3] : inShape[2];
+      final bool isUint8 = inTensor.type.toString().toLowerCase().contains('uint8');
+
       final img.Image resizedImage = img.copyResize(
         decodedImage,
-        width: 640,
-        height: 640,
+        width: imgWidth,
+        height: imgHeight,
       );
 
-      var input = List.generate(
-        1,
-        (b) => List.generate(
-          640,
-          (y) => List.generate(
-            640,
-            (x) {
-              final pixel = resizedImage.getPixel(x, y);
-              return [
-                pixel.r / 255.0,
-                pixel.g / 255.0,
-                pixel.b / 255.0,
-              ];
-            },
+      Object input;
+      if (channelsFirst) {
+        // Format [1, 3, H, W]
+        input = List.generate(
+          1,
+          (_) => List.generate(
+            3,
+            (c) => List.generate(
+              imgHeight,
+              (y) => List.generate(
+                imgWidth,
+                (x) {
+                  final pixel = resizedImage.getPixel(x, y);
+                  final num val = c == 0 ? pixel.r : (c == 1 ? pixel.g : pixel.b);
+                  return isUint8 ? val.toInt() : val / 255.0;
+                },
+              ),
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        // Format [1, H, W, 3]
+        input = List.generate(
+          1,
+          (_) => List.generate(
+            imgHeight,
+            (y) => List.generate(
+              imgWidth,
+              (x) {
+                final pixel = resizedImage.getPixel(x, y);
+                if (isUint8) {
+                  return [pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()];
+                }
+                return [
+                  pixel.r / 255.0,
+                  pixel.g / 255.0,
+                  pixel.b / 255.0,
+                ];
+              },
+            ),
+          ),
+        );
+      }
 
-      // Liest die exakte Ausgabe-Form des Modells automatisch aus (z.B. [1, 84, 8400])
-      final outputShape = interpreter!.getOutputTensor(0).shape;
-      final int numRows = outputShape[1];
-      final int numBoxes = outputShape[2];
-      final int numClasses = numRows - 4;
+      final outTensor = interpreter!.getOutputTensor(0);
+      final outShape = outTensor.shape; // z.B. [1, 84, 8400] oder [1, 8400, 84]
+      final int dim1 = outShape[1];
+      final int dim2 = outShape[2];
 
       var output = List.generate(
         1,
         (_) => List.generate(
-          numRows,
-          (_) => List.filled(numBoxes, 0.0),
+          dim1,
+          (_) => List.filled(dim2, 0.0),
         ),
       );
 
@@ -129,12 +169,19 @@ class _HomeScreenState extends State<HomeScreen> {
       List ergebnisse = [];
       double confThreshold = 0.4;
 
+      final bool isTransposed = dim1 > dim2;
+      final int numBoxes = isTransposed ? dim1 : dim2;
+      final int numRows = isTransposed ? dim2 : dim1;
+      final int numClasses = numRows - 4;
+
       for (int c = 0; c < numBoxes; c++) {
         double maxScore = 0.0;
         int bestClassId = -1;
 
         for (int i = 0; i < numClasses; i++) {
-          final double score = output[0][i + 4][c];
+          final double score = isTransposed
+              ? (output[0][c][i + 4] as num).toDouble()
+              : (output[0][i + 4][c] as num).toDouble();
           if (score > maxScore) {
             maxScore = score;
             bestClassId = i;
@@ -142,10 +189,18 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         if (maxScore > confThreshold && bestClassId >= 0) {
-          final double x = output[0][0][c];
-          final double y = output[0][1][c];
-          final double w = output[0][2][c];
-          final double h = output[0][3][c];
+          final double x = isTransposed
+              ? (output[0][c][0] as num).toDouble()
+              : (output[0][0][c] as num).toDouble();
+          final double y = isTransposed
+              ? (output[0][c][1] as num).toDouble()
+              : (output[0][1][c] as num).toDouble();
+          final double w = isTransposed
+              ? (output[0][c][2] as num).toDouble()
+              : (output[0][2][c] as num).toDouble();
+          final double h = isTransposed
+              ? (output[0][c][3] as num).toDouble()
+              : (output[0][3][c] as num).toDouble();
 
           String labelName = bestClassId < labels.length
               ? labels[bestClassId].toString().trim()
@@ -201,6 +256,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 "GrazLens",
                 style: GoogleFonts.playfairDisplay(fontSize: 50),
               ),
+
+              if (modellInfo.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(
+                    modellInfo,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
 
               if (isWorking)
                 const Padding(
