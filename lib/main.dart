@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadModel() async {
     try {
-      interpreter = await Interpreter.fromAsset('assets/yolov8n.tflite');
+      interpreter = await Interpreter.fromAsset('assets/yolov8m.tflite');
       interpreter!.allocateTensors();
 
       final inTensor = interpreter!.getInputTensor(0);
